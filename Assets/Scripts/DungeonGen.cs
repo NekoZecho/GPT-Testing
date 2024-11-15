@@ -20,15 +20,22 @@ public class DungeonGenerator : MonoBehaviour
     private List<RectInt> rooms = new List<RectInt>();
     private HashSet<Hallway> existingHallways = new HashSet<Hallway>();
 
+    public int roomPadding = 4;          // Minimum spacing between rooms
+    public int placementRange = 50;       // Range within which rooms are placed
+
+    public List<Region> regions = new List<Region>();
+    public TileBase[] floorRegionTiles;
+    public TileBase[] wallRegionTiles;
+
     void Start()
     {
+        GenerateRegions();
         GenerateDungeon();
     }
 
     void GenerateDungeon()
     {
         Vector2Int currentPosition = Vector2Int.zero;
-
         // Generate starting room at the player's position
         RectInt startRoom = new RectInt(currentPosition - startRoomSize / 2, startRoomSize);
         rooms.Add(startRoom);
@@ -74,6 +81,49 @@ public class DungeonGenerator : MonoBehaviour
         CreateWalls();
     }
 
+
+    void GenerateRegions()
+    {
+        int numberOfRegions = Random.Range(2, 5); // Random number of regions
+        for (int i = 0; i < numberOfRegions; i++)
+        {
+            Vector2Int size = new Vector2Int(
+                Random.Range(roomMinSize.x, roomMaxSize.x),
+                Random.Range(roomMinSize.y, roomMaxSize.y)
+            );
+
+            Vector2Int position = new Vector2Int(
+                Random.Range(-placementRange, placementRange),
+                Random.Range(-placementRange, placementRange)
+            );
+
+            Rect regionBounds = new Rect(position, size);
+            if (!DoesRegionOverlap(regionBounds))
+            {
+                TileBase floorTile = floorRegionTiles[Random.Range(0, floorRegionTiles.Length)];
+                TileBase wallTile = wallRegionTiles[Random.Range(0, wallRegionTiles.Length)];
+
+                regions.Add(new Region(regionBounds, floorTile, wallTile));
+
+                Debug.Log($"Created Region at {regionBounds.position} with size {regionBounds.size}");
+            }
+        }
+    }
+
+
+    bool DoesRegionOverlap(Rect newRegion)
+    {
+        foreach (Region region in regions)
+        {
+            if (region.Bounds.Overlaps(newRegion))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     bool CheckForParallelHallways(Hallway newHallway, RectInt room1, RectInt room2)
     {
         // Check for parallel hallways in the same direction
@@ -118,9 +168,6 @@ public class DungeonGenerator : MonoBehaviour
         return nearestRoom;
     }
 
-
-    public int roomPadding = 4;          // Minimum spacing between rooms
-    public int placementRange = 50;       // Range within which rooms are placed
 
     RectInt GenerateRoom(int maxAttempts = 10)
     {
@@ -189,11 +236,13 @@ public class DungeonGenerator : MonoBehaviour
 
     void CreateRoom(RectInt room)
     {
+        TileBase floor = GetFloorTileForPosition(room.center);
+
         for (int x = room.xMin; x < room.xMax; x++)
         {
             for (int y = room.yMin; y < room.yMax; y++)
             {
-                floorTilemap.SetTile(new Vector3Int(x, y, 0), floorTile);
+                floorTilemap.SetTile(new Vector3Int(x, y, 0), floor);
             }
         }
     }
@@ -201,68 +250,79 @@ public class DungeonGenerator : MonoBehaviour
     void CreateHallway(Vector2Int start, Vector2Int end)
     {
         Vector2Int currentPosition = start;
+        TileBase floor = GetFloorTileForPosition(currentPosition);
 
-        // Decide randomly whether to move horizontally or vertically first
         bool moveHorizontallyFirst = Random.value > 0.5f;
 
         if (moveHorizontallyFirst)
         {
-            // Move horizontally first to the X position of the end point
             while (currentPosition.x != end.x)
             {
                 int step = currentPosition.x < end.x ? 1 : -1;
                 currentPosition.x += step;
+                floor = GetFloorTileForPosition(currentPosition);
 
-                // Add tiles for hallway width
                 for (int j = -hallwayWidth / 2; j <= hallwayWidth / 2; j++)
                 {
-                    Vector3Int pos = new Vector3Int(currentPosition.x, currentPosition.y + j, 0);
-                    floorTilemap.SetTile(pos, floorTile);
+                    floorTilemap.SetTile(new Vector3Int(currentPosition.x, currentPosition.y + j, 0), floor);
                 }
             }
 
-            // Move vertically to the Y position of the end point
             while (currentPosition.y != end.y)
             {
                 int step = currentPosition.y < end.y ? 1 : -1;
                 currentPosition.y += step;
+                floor = GetFloorTileForPosition(currentPosition);
 
                 for (int j = -hallwayWidth / 2; j <= hallwayWidth / 2; j++)
                 {
-                    Vector3Int pos = new Vector3Int(currentPosition.x + j, currentPosition.y, 0);
-                    floorTilemap.SetTile(pos, floorTile);
+                    floorTilemap.SetTile(new Vector3Int(currentPosition.x + j, currentPosition.y, 0), floor);
                 }
             }
         }
         else
         {
-            // Move vertically first to the Y position of the end point
             while (currentPosition.y != end.y)
             {
                 int step = currentPosition.y < end.y ? 1 : -1;
                 currentPosition.y += step;
+                floor = GetFloorTileForPosition(currentPosition);
 
                 for (int j = -hallwayWidth / 2; j <= hallwayWidth / 2; j++)
                 {
-                    Vector3Int pos = new Vector3Int(currentPosition.x + j, currentPosition.y, 0);
-                    floorTilemap.SetTile(pos, floorTile);
+                    floorTilemap.SetTile(new Vector3Int(currentPosition.x + j, currentPosition.y, 0), floor);
                 }
             }
 
-            // Move horizontally to the X position of the end point
             while (currentPosition.x != end.x)
             {
                 int step = currentPosition.x < end.x ? 1 : -1;
                 currentPosition.x += step;
+                floor = GetFloorTileForPosition(currentPosition);
 
                 for (int j = -hallwayWidth / 2; j <= hallwayWidth / 2; j++)
                 {
-                    Vector3Int pos = new Vector3Int(currentPosition.x, currentPosition.y + j, 0);
-                    floorTilemap.SetTile(pos, floorTile);
+                    floorTilemap.SetTile(new Vector3Int(currentPosition.x, currentPosition.y + j, 0), floor);
                 }
             }
         }
     }
+
+    TileBase GetFloorTileForPosition(Vector2 position)
+    {
+        foreach (Region region in regions)
+        {
+            if (region.Bounds.Contains(position))
+            {
+                Debug.Log($"Using region tile at {position}");
+                return region.FloorTile;
+            }
+        }
+        Debug.Log($"Using default tile at {position}");
+        return floorTile; // Default tile
+    }
+
+
 
 
     Vector2 GetRandomPointInRoom(RectInt room)
@@ -277,28 +337,52 @@ public class DungeonGenerator : MonoBehaviour
     void CreateWalls()
     {
         BoundsInt bounds = floorTilemap.cellBounds;
+
+        // Iterate through all tiles in the bounds of the floor tilemap
         for (int x = bounds.xMin; x < bounds.xMax; x++)
         {
             for (int y = bounds.yMin; y < bounds.yMax; y++)
             {
                 Vector3Int pos = new Vector3Int(x, y, 0);
-                if (floorTilemap.HasTile(pos) && !wallTilemap.HasTile(pos))
+
+                // If the current tile is a floor tile
+                if (floorTilemap.HasTile(pos))
                 {
-                    for (int dx = -1; dx <= 1; dx++)
+                    // Place walls above (2 tiles thick)
+                    for (int dy = 1; dy <= 2; dy++)
                     {
-                        for (int dy = -1; dy <= 1; dy++)
+                        Vector3Int wallPos = pos + new Vector3Int(0, dy, 0);
+                        if (!floorTilemap.HasTile(wallPos) && !wallTilemap.HasTile(wallPos))
                         {
-                            Vector3Int wallPos = pos + new Vector3Int(dx, dy, 0);
-                            if (!floorTilemap.HasTile(wallPos))
-                            {
-                                wallTilemap.SetTile(wallPos, wallTile);
-                            }
+                            wallTilemap.SetTile(wallPos, wallTile);
                         }
+                    }
+
+                    // Place walls below (1 tile thick)
+                    Vector3Int bottomWallPos = pos + new Vector3Int(0, -1, 0);
+                    if (!floorTilemap.HasTile(bottomWallPos) && !wallTilemap.HasTile(bottomWallPos))
+                    {
+                        wallTilemap.SetTile(bottomWallPos, wallTile);
+                    }
+
+                    // Place walls to the left (1 tile thick)
+                    Vector3Int leftWallPos = pos + new Vector3Int(-1, 0, 0);
+                    if (!floorTilemap.HasTile(leftWallPos) && !wallTilemap.HasTile(leftWallPos))
+                    {
+                        wallTilemap.SetTile(leftWallPos, wallTile);
+                    }
+
+                    // Place walls to the right (1 tile thick)
+                    Vector3Int rightWallPos = pos + new Vector3Int(1, 0, 0);
+                    if (!floorTilemap.HasTile(rightWallPos) && !wallTilemap.HasTile(rightWallPos))
+                    {
+                        wallTilemap.SetTile(rightWallPos, wallTile);
                     }
                 }
             }
         }
     }
+
 }
 public struct Hallway
 {
@@ -350,5 +434,18 @@ public struct Hallway
     public override int GetHashCode()
     {
         return start.GetHashCode() ^ end.GetHashCode();
+    }
+}
+public class Region
+{
+    public Rect Bounds;
+    public TileBase FloorTile;
+    public TileBase WallTile;
+
+    public Region(Rect bounds, TileBase floorTile, TileBase wallTile)
+    {
+        Bounds = bounds;
+        FloorTile = floorTile;
+        WallTile = wallTile;
     }
 }
